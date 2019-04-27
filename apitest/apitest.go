@@ -13,7 +13,7 @@ import (
 
 	"github.com/jessevdk/go-flags"
 
-	"gopkg.in/kothar/go-backblaze.v0"
+	"github.com/ConnorJarvis/go-backblaze"
 )
 
 // Options defines command line flags used by this application

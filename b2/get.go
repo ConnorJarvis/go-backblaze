@@ -16,7 +16,7 @@ import (
 	"github.com/gosuri/uiprogress"
 	"github.com/gosuri/uiprogress/util/strutil"
 
-	"gopkg.in/kothar/go-backblaze.v0"
+	"github.com/ConnorJarvis/go-backblaze"
 )
 
 // TODO support subdirectories

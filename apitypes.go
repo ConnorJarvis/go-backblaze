@@ -194,6 +194,25 @@ type hideFileRequest struct {
 	FileName string `json:"fileName"`
 }
 
+//FinishLargeFileResponse describes a large file
+type FinishLargeFileResponse struct {
+	AccountID       string            `json:"accountId"`
+	Action          FileAction        `json:"action"`
+	BucketID        string            `json:"bucketId"`
+	ContentLength   int64             `json:"contentLength"`
+	ContentSha1     string            `json:"contentSha1"`
+	ContentType     string            `json:"contentType"`
+	ID              string            `json:"fileId"`
+	FileInfo        map[string]string `json:"fileInfo"`
+	Name            string            `json:"fileName"`
+	UploadTimestamp int64             `json:"uploadTimestamp"`
+}
+
+type finishLargeFileRequest struct {
+	ID            string   `json:"fileId"`
+	PartSha1Array []string `json:"partSha1Array"`
+}
+
 // FileAction indicates the current status of a file in a B2 bucket
 type FileAction string
 

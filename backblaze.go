@@ -1,5 +1,5 @@
 // Package backblaze B2 API for Golang
-package backblaze // import "gopkg.in/kothar/go-backblaze.v0"
+package backblaze
 
 import (
 	"bytes"
@@ -134,7 +134,7 @@ func (c *B2) internalAuthorizeAccount() error {
 	// Store token
 	c.auth = &authorizationState{
 		authorizeAccountResponse: authResponse,
-		valid: true,
+		valid:                    true,
 	}
 
 	return nil
