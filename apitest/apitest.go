@@ -13,7 +13,7 @@ import (
 
 	"github.com/jessevdk/go-flags"
 
-	"github.com/ConnorJarvis/go-backblaze"
+	"gopkg.in/kothar/go-backblaze.v0"
 )
 
 // Options defines command line flags used by this application
@@ -74,7 +74,7 @@ func testBucketCreate(b2 *backblaze.B2) *backblaze.Bucket {
 	}
 	log.Printf("Testing with bucket %s", opts.Bucket)
 
-	b, err := b2.Bucket(opts.Bucket)
+	b, err := b2.Bucket(backblaze.GetBucketRequest{Name: opts.Bucket})
 	check(err)
 	if b != nil {
 		log.Fatal("Testing bucket already exists")

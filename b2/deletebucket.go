@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+
+	"gopkg.in/kothar/go-backblaze.v0"
 )
 
 // DeleteBucket is a command
@@ -23,7 +25,7 @@ func (o *DeleteBucket) Execute(args []string) error {
 		return err
 	}
 
-	bucket, err := client.Bucket(opts.Bucket)
+	bucket, err := client.Bucket(backblaze.GetBucketRequest{Name: opts.Bucket})
 	if err != nil {
 		return err
 	}

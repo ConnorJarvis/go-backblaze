@@ -16,7 +16,7 @@ import (
 	"github.com/gosuri/uiprogress"
 	"github.com/gosuri/uiprogress/util/strutil"
 
-	"github.com/ConnorJarvis/go-backblaze"
+	"gopkg.in/kothar/go-backblaze.v0"
 )
 
 // TODO support subdirectories
@@ -43,7 +43,7 @@ func (o *Get) Execute(args []string) error {
 		return err
 	}
 
-	bucket, err := client.Bucket(opts.Bucket)
+	bucket, err := client.Bucket(backblaze.GetBucketRequest{Name: opts.Bucket})
 	if err != nil {
 		return err
 	}

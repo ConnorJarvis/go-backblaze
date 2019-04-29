@@ -148,6 +148,9 @@ func (c *B2) internalAuthorizeAccount() error {
 		authorizeAccountResponse: authResponse,
 		valid:                    true,
 	}
+	// Set AccountID to the returned value from authorizeAccountResponse
+	// This is for when an Application Key is used instead of Master Application Key
+	c.AccountID = authResponse.AccountID
 
 	return nil
 }

@@ -19,7 +19,7 @@ func (o *ListBuckets) Execute(args []string) error {
 		return err
 	}
 
-	response, err := client.ListBuckets()
+	response, err := client.ListBuckets(nil)
 	if err != nil {
 		return err
 	}

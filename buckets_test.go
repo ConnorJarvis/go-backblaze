@@ -39,7 +39,7 @@ func TestListBuckets(T *testing.T) {
 		host:       server.URL,
 	}
 
-	buckets, err := b2.ListBuckets()
+	buckets, err := b2.ListBuckets(nil)
 	if err != nil {
 		T.Fatal(err)
 	}

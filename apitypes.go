@@ -94,8 +94,23 @@ type BucketInfo struct {
 	Revision int `json:"revision"`
 }
 
-type bucketRequest struct {
-	ID string `json:"bucketId"`
+type bucketUploadRequest struct {
+	AccountID string `json:"accountId"`
+	ID        string `json:"bucketId,omitempty"`
+	Name      string `json:"bucketName,omitempty"`
+}
+
+//GetBucketRequest descirbes the request parameters provided to Bucket to get information on a bucket
+type GetBucketRequest struct {
+	ID   string `json:"bucketId,omitempty"`
+	Name string `json:"bucketName,omitempty"`
+}
+
+//ListBucketsRequest descirbes the request parameters provided to ListBuckets to get information on a bucket
+type ListBucketsRequest struct {
+	AccountID string `json:"accountId"`
+	ID        string `json:"bucketId,omitempty"`
+	Name      string `json:"bucketName,omitempty"`
 }
 
 type createBucketRequest struct {

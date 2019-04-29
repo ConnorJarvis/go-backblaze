@@ -574,15 +574,15 @@ func (b *Bucket) HideFile(fileName string) (*FileStatus, error) {
 	return response, nil
 }
 
-// FinishLargeFile retrieves information about one file stored in B2.
-func (b *B2) FinishLargeFile(fileID string, partSha1Array []string) (*FinishLargeFileResponse, error) {
+// FinishLargeFile converts the parts uploaded from b2_get_upload_part_url into the final file
+func (c *B2) FinishLargeFile(fileID string, partSha1Array []string) (*FinishLargeFileResponse, error) {
 	request := &finishLargeFileRequest{
 		ID:            fileID,
 		PartSha1Array: partSha1Array,
 	}
 	response := &FinishLargeFileResponse{}
 
-	if err := b.apiRequest("b2_finish_large_file", request, response); err != nil {
+	if err := c.apiRequest("b2_finish_large_file", request, response); err != nil {
 		return nil, err
 	}
 

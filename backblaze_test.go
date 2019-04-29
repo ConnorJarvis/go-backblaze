@@ -160,7 +160,7 @@ func TestReAuth(T *testing.T) {
 		host:       server.URL,
 	}
 
-	_, err := b2.ListBuckets()
+	_, err := b2.ListBuckets(nil)
 	if err != nil {
 		T.Fatal(err)
 	}

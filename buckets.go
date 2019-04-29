@@ -84,9 +84,11 @@ func (b *Bucket) Delete() error {
 
 // ListBuckets lists buckets associated with an account, in alphabetical order
 // by bucket ID.
-func (b *B2) ListBuckets() ([]*Bucket, error) {
-	request := &accountRequest{
-		ID: b.AccountID,
+func (b *B2) ListBuckets(request *ListBucketsRequest) ([]*Bucket, error) {
+	if request == nil {
+		request = &ListBucketsRequest{
+			AccountID: b.AccountID,
+		}
 	}
 	response := &listBucketsResponse{}
 
@@ -165,14 +167,20 @@ func (b *Bucket) UpdateAll(bucketType BucketType, bucketInfo map[string]string, 
 }
 
 // Bucket looks up a bucket for the currently authorized client
-func (b *B2) Bucket(bucketName string) (*Bucket, error) {
-	buckets, err := b.ListBuckets()
+func (b *B2) Bucket(bucketRequest GetBucketRequest) (*Bucket, error) {
+
+	buckets, err := b.ListBuckets(&ListBucketsRequest{
+		AccountID: b.AccountID,
+		Name:      bucketRequest.Name,
+		ID:        bucketRequest.ID,
+	})
+
 	if err != nil {
 		return nil, err
 	}
 
 	for _, bucket := range buckets {
-		if bucket.Name == bucketName {
+		if bucket.Name == bucketRequest.Name || bucket.ID == bucketRequest.ID {
 			return bucket, nil
 		}
 	}
@@ -196,7 +204,7 @@ func (b *Bucket) GetUploadAuth() (*UploadAuth, error) {
 	// If none are available, make a new one
 	default:
 		// Make a new one
-		request := &bucketRequest{
+		request := &bucketUploadRequest{
 			ID: b.ID,
 		}
 

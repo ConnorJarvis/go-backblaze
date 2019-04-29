@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/ConnorJarvis/go-backblaze"
+	"gopkg.in/kothar/go-backblaze.v0"
 )
 
 // CreateBucket is a command
