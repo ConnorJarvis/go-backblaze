@@ -9,10 +9,13 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"math"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/google/readahead"
 
@@ -568,6 +571,215 @@ func (b *Bucket) HideFile(fileName string) (*FileStatus, error) {
 	response := &FileStatus{}
 
 	if err := b.b2.apiRequest("b2_hide_file", request, response); err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
+// LargeFile provides access to an uploadAuthPool for the LargeFile
+type LargeFile struct {
+	*StartLargeFileResponse
+	filePath       string
+	uploadAuthPool chan *UploadAuth
+	partPool       chan *Part
+	b2             *B2
+	// State
+	mutex sync.Mutex
+}
+
+// Part describes a part of a LargeFile that needs to be uploaded
+type Part struct {
+	number    int
+	startByte int64
+	endByte   int64
+}
+
+// UploadLargeFile handles the full process of a multipart upload
+func (b *Bucket) UploadLargeFile(fileName string, contentType *string, fileInfo *map[string]string, filePath string, uploadThreads int) (*FinishLargeFileResponse, error) {
+	// Open file to get stats for upload
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, err
+	}
+	stats, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	contentLength := stats.Size()
+	file.Close()
+	// Check that the supplied file isn't too small
+	if contentLength < b.b2.AbsoluteMinimumPartSize+1 {
+		return nil, errors.New("File is smaller then the minimum large_file size")
+	}
+	// Decide on the part size for the upload
+	partSize := b.b2.RecommendedPartSize
+	if contentLength-1 < int64(b.b2.RecommendedPartSize) {
+		partSize = contentLength - 1
+	}
+	// Start the large file
+	largeFileResponse, err := b.StartLargeFile(fileName, contentType, fileInfo)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to start large file upload: %s", err)
+	}
+	largeFile := &LargeFile{
+		StartLargeFileResponse: largeFileResponse,
+		filePath:               filePath,
+		partPool:               make(chan *Part, int(math.Ceil(float64(contentLength)/float64(partSize)))),
+		uploadAuthPool:         make(chan *UploadAuth, b.b2.MaxIdleUploads),
+		b2:                     b.b2,
+	}
+	// Fill the part channel
+	for i := 1; i <= int(math.Ceil(float64(contentLength)/float64(partSize))); i++ {
+		largeFile.partPool <- &Part{
+			number:    i,
+			startByte: (int64(i) - 1) * partSize,
+			endByte:   int64(math.Min(float64(int64(i)*partSize), float64(contentLength))),
+		}
+	}
+
+	parts := make([]string, 0)
+	var wg sync.WaitGroup
+
+	wg.Add(int(math.Ceil(float64(contentLength) / float64(partSize))))
+
+	for i := 0; i < uploadThreads; i++ {
+		go func() {
+			for {
+				part, ok := <-largeFile.partPool
+				if !ok {
+					break
+				}
+				resp, err := largeFile.UploadPart(part)
+				if err != nil {
+					fmt.Errorf("Unable to upload large file part: %s", err)
+				}
+				largeFile.mutex.Lock()
+				parts = append(parts, resp.ContentSha1)
+				largeFile.mutex.Unlock()
+				wg.Done()
+			}
+		}()
+	}
+	wg.Wait()
+	close(largeFile.partPool)
+	finishLargeFile, err := largeFile.b2.FinishLargeFile(largeFileResponse.ID, parts)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to finish large file: %s", err)
+	}
+	return finishLargeFile, nil
+}
+
+// UploadPart reterives a part from the pool and uploads it
+func (l *LargeFile) UploadPart(part *Part) (*UploadPartResponse, error) {
+
+	file, err := os.Open(l.filePath)
+	if err != nil {
+		return nil, err
+	}
+	r := io.ReadSeeker(file)
+	// Hash the upload
+	hash := sha1.New()
+
+	r.Seek(part.startByte, io.SeekStart)
+	lr := io.LimitReader(r, part.endByte-part.startByte)
+	// If the input is seekable, just hash then seek back to the beginning
+	_, err = io.Copy(hash, lr)
+	if err != nil {
+		return nil, err
+	}
+	r.Seek(part.startByte, io.SeekStart)
+
+	sha1Hash := hex.EncodeToString(hash.Sum(nil))
+	f, err := l.UploadHashedPart(sha1Hash, part.endByte-part.startByte, part)
+
+	// Retry after non-fatal errors
+	if b2err, ok := err.(*B2Error); ok {
+		if !b2err.IsFatal() && !l.b2.NoRetry {
+			f, err = l.UploadHashedPart(sha1Hash, part.endByte-part.startByte, part)
+		}
+	}
+	file.Close()
+	return f, err
+
+}
+
+// UploadHashedPart Uploads a part of a large_file to B2, returning its Sha1 value
+func (l *LargeFile) UploadHashedPart(sha1Hash string, contentLength int64, part *Part) (*UploadPartResponse, error) {
+
+	auth, err := l.GetLargeFileUploadAuth()
+	if err != nil {
+		return nil, err
+	}
+
+	if l.b2.Debug {
+		fmt.Printf("         Upload: %s\n", l.Name)
+		fmt.Printf("    Part Number: %d\n", part.number)
+		fmt.Printf("           SHA1: %s\n", sha1Hash)
+		fmt.Printf("  ContentLength: %d\n", contentLength)
+	}
+	file, err := os.Open(l.filePath)
+	if err != nil {
+		return nil, err
+	}
+	r := io.ReadSeeker(file)
+
+	r.Seek(part.startByte, io.SeekStart)
+	lr := io.LimitReader(r, part.endByte-part.startByte)
+	// Create authorized request
+	req, err := http.NewRequest("POST", auth.UploadURL.String(), lr)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Authorization", auth.AuthorizationToken)
+
+	// Set file metadata
+	req.ContentLength = contentLength
+	// default content type
+	req.Header.Set("X-Bz-Part-Number", strconv.Itoa(part.number))
+	req.Header.Set("X-Bz-Content-Sha1", sha1Hash)
+
+	resp, err := l.b2.httpClient.Do(req)
+	file.Close()
+	if err != nil {
+		auth.Valid = false
+		return nil, err
+	}
+
+	// Place the UploadAuth back in the pool
+	l.ReturnLargeFileUploadAuth(auth)
+
+	result := &UploadPartResponse{}
+
+	// We are not dealing with the b2 client auth token in this case, hence the nil auth
+	if err := l.b2.parseResponse(resp, result, nil); err != nil {
+		auth.Valid = false
+		return nil, err
+	}
+
+	if sha1Hash != result.ContentSha1 {
+		return nil, errors.New("SHA1 of uploaded file does not match local hash")
+	}
+
+	return result, nil
+}
+
+// StartLargeFile prepares a large_file for upload returning the file ID
+func (b *Bucket) StartLargeFile(fileName string, contentType *string, fileInfo *map[string]string) (*StartLargeFileResponse, error) {
+	if contentType == nil {
+		defaultContentType := "b2/x-auto"
+		contentType = &defaultContentType
+	}
+	request := &startLargeFileRequest{
+		BucketID:    b.ID,
+		Name:        fileName,
+		ContentType: *contentType,
+		FileInfo:    fileInfo,
+	}
+	response := &StartLargeFileResponse{}
+
+	if err := b.b2.apiRequest("b2_start_large_file", request, response); err != nil {
 		return nil, err
 	}
 

@@ -3,6 +3,7 @@ package backblaze
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"io/ioutil"
 	"log"
@@ -14,7 +15,7 @@ import (
 
 const (
 	b2Host = "https://api.backblazeb2.com"
-	v1     = "/b2api/v1/"
+	v1     = "/b2api/v2/"
 )
 
 // Credentials are the identification required by the Backblaze B2 API
@@ -34,9 +35,21 @@ type Credentials struct {
 	KeyID          string
 }
 
+//LargeFileInfo contains the information required for a large file upload
+type LargeFileInfo struct {
+	RecommendedPartSize     int64
+	AbsoluteMinimumPartSize int64
+}
+
 // B2 implements a B2 API client. Do not modify state concurrently.
 type B2 struct {
 	Credentials
+
+	// Capabilities of the auth token
+	Allowed
+
+	//LargeFile Information
+	LargeFileInfo
 
 	// If true, don't retry requests if authorization has expired
 	NoRetry bool
@@ -151,6 +164,18 @@ func (c *B2) internalAuthorizeAccount() error {
 	// Set AccountID to the returned value from authorizeAccountResponse
 	// This is for when an Application Key is used instead of Master Application Key
 	c.AccountID = authResponse.AccountID
+
+	// Check if the bucket associated with the application key exists
+	if authResponse.Allowed.BucketName == nil && authResponse.Allowed.BucketID != nil {
+		return errors.New("Bucket associated with this authorization token no longer exists")
+	}
+
+	// Set Allowed to the returned values from authorizeAccountResponse
+	c.Allowed = authResponse.Allowed
+
+	// Set LargeFileInformation to the returned values from authorizeAccountResponse
+	c.RecommendedPartSize = authResponse.RecommendedPartSize
+	c.AbsoluteMinimumPartSize = authResponse.AbsoluteMinimumPartSize
 
 	return nil
 }

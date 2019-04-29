@@ -84,12 +84,12 @@ func (b *Bucket) Delete() error {
 
 // ListBuckets lists buckets associated with an account, in alphabetical order
 // by bucket ID.
-func (b *B2) ListBuckets(request *ListBucketsRequest) ([]*Bucket, error) {
-	if request == nil {
-		request = &ListBucketsRequest{
-			AccountID: b.AccountID,
-		}
+func (b *B2) ListBuckets() ([]*Bucket, error) {
+	request := &ListBucketsRequest{
+		AccountID: b.AccountID,
+		ID:        b.Allowed.BucketID,
 	}
+
 	response := &listBucketsResponse{}
 
 	if err := b.apiRequest("b2_list_buckets", request, response); err != nil {
@@ -167,22 +167,26 @@ func (b *Bucket) UpdateAll(bucketType BucketType, bucketInfo map[string]string, 
 }
 
 // Bucket looks up a bucket for the currently authorized client
-func (b *B2) Bucket(bucketRequest GetBucketRequest) (*Bucket, error) {
-
-	buckets, err := b.ListBuckets(&ListBucketsRequest{
-		AccountID: b.AccountID,
-		Name:      bucketRequest.Name,
-		ID:        bucketRequest.ID,
-	})
+func (b *B2) Bucket(bucketRequest *GetBucketRequest) (*Bucket, error) {
+	buckets, err := b.ListBuckets()
 
 	if err != nil {
 		return nil, err
 	}
 
 	for _, bucket := range buckets {
-		if bucket.Name == bucketRequest.Name || bucket.ID == bucketRequest.ID {
+		if bucketRequest == nil {
 			return bucket, nil
+		} else if bucketRequest.Name != nil {
+			if bucket.Name == *bucketRequest.Name {
+				return bucket, nil
+			}
+		} else {
+			if bucket.ID == *bucketRequest.ID {
+				return bucket, nil
+			}
 		}
+
 	}
 
 	return nil, nil
@@ -235,6 +239,58 @@ func (b *Bucket) ReturnUploadAuth(uploadAuth *UploadAuth) {
 	if uploadAuth.Valid {
 		select {
 		case b.uploadAuthPool <- uploadAuth:
+		default:
+		}
+	}
+}
+
+// GetLargeFileUploadAuth retrieves the URL to use for uploading parts of a large file
+//
+// When you upload a part of a large file to B2, you must call b2_get_upload_part_url first to get
+// the URL for uploading directly to the place where the part will be stored.
+//
+// If the upload is successful, ReturnLargeFileUploadAuth(*uploadAuth) should be called
+// to place it back in the pool for reuse.
+func (l *LargeFile) GetLargeFileUploadAuth() (*UploadAuth, error) {
+	select {
+	// Pop an UploadAuth from the pool
+	case auth := <-l.uploadAuthPool:
+		return auth, nil
+
+	// If none are available, make a new one
+	default:
+		// Make a new one
+		request := &partUploadRequest{
+			FileID: l.ID,
+		}
+
+		response := &getUploadURLResponse{}
+		if err := l.b2.apiRequest("b2_get_upload_part_url", request, response); err != nil {
+			return nil, err
+		}
+
+		// Set bucket auth
+		uploadURL, err := url.Parse(response.UploadURL)
+		if err != nil {
+			return nil, err
+		}
+		auth := &UploadAuth{
+			AuthorizationToken: response.AuthorizationToken,
+			UploadURL:          uploadURL,
+			Valid:              true,
+		}
+
+		return auth, nil
+	}
+}
+
+// ReturnUploadAuth returns an upload URL to the available pool.
+// This should not be called if the upload fails.
+// Instead request another GetUploadAuth() and retry.
+func (l *LargeFile) ReturnLargeFileUploadAuth(uploadAuth *UploadAuth) {
+	if uploadAuth.Valid {
+		select {
+		case l.uploadAuthPool <- uploadAuth:
 		default:
 		}
 	}

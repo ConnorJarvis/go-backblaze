@@ -38,10 +38,21 @@ func (e *B2Error) IsFatal() bool {
 }
 
 type authorizeAccountResponse struct {
-	AccountID          string `json:"accountId"`
-	APIEndpoint        string `json:"apiUrl"`
-	AuthorizationToken string `json:"authorizationToken"`
-	DownloadURL        string `json:"downloadUrl"`
+	AccountID               string  `json:"accountId"`
+	APIEndpoint             string  `json:"apiUrl"`
+	AuthorizationToken      string  `json:"authorizationToken"`
+	DownloadURL             string  `json:"downloadUrl"`
+	RecommendedPartSize     int64   `json:"recommendedPartSize"`
+	AbsoluteMinimumPartSize int64   `json:"absoluteMinimumPartSize"`
+	Allowed                 Allowed `json:"allowed"`
+}
+
+// Allowed contains the Capabilities of an auth token
+type Allowed struct {
+	Capabilities []string `json:"capabilities"`
+	BucketID     *string  `json:"bucketId,omitempty"`
+	BucketName   *string  `json:"bucketName,omitempty"`
+	NamePrefix   *string  `json:"namePrefix,omitempty"`
 }
 
 type accountRequest struct {
@@ -100,17 +111,21 @@ type bucketUploadRequest struct {
 	Name      string `json:"bucketName,omitempty"`
 }
 
-//GetBucketRequest descirbes the request parameters provided to Bucket to get information on a bucket
-type GetBucketRequest struct {
-	ID   string `json:"bucketId,omitempty"`
-	Name string `json:"bucketName,omitempty"`
+type partUploadRequest struct {
+	FileID string `json:"fileId"`
 }
 
-//ListBucketsRequest descirbes the request parameters provided to ListBuckets to get information on a bucket
+//GetBucketRequest describes the request parameters provided to Bucket to get information on a bucket
+type GetBucketRequest struct {
+	ID   *string `json:"bucketId,omitempty"`
+	Name *string `json:"bucketName,omitempty"`
+}
+
+//ListBucketsRequest describes the request parameters provided to ListBuckets to get information on a bucket
 type ListBucketsRequest struct {
-	AccountID string `json:"accountId"`
-	ID        string `json:"bucketId,omitempty"`
-	Name      string `json:"bucketName,omitempty"`
+	AccountID string  `json:"accountId"`
+	ID        *string `json:"bucketId,omitempty"`
+	Name      *string `json:"bucketName,omitempty"`
 }
 
 type createBucketRequest struct {
@@ -166,7 +181,6 @@ type File struct {
 	ContentType     string            `json:"contentType"`
 	FileInfo        map[string]string `json:"fileInfo"`
 	Action          FileAction        `json:"action"`
-	Size            int               `json:"size"` // Deprecated - same as ContentSha1
 	UploadTimestamp int64             `json:"uploadTimestamp"`
 }
 
@@ -209,7 +223,7 @@ type hideFileRequest struct {
 	FileName string `json:"fileName"`
 }
 
-//FinishLargeFileResponse describes a large file
+//FinishLargeFileResponse describes the response from finish_large_file
 type FinishLargeFileResponse struct {
 	AccountID       string            `json:"accountId"`
 	Action          FileAction        `json:"action"`
@@ -226,6 +240,37 @@ type FinishLargeFileResponse struct {
 type finishLargeFileRequest struct {
 	ID            string   `json:"fileId"`
 	PartSha1Array []string `json:"partSha1Array"`
+}
+
+//StartLargeFileResponse describes the response from start_large_file
+type StartLargeFileResponse struct {
+	AccountID       string            `json:"accountId"`
+	Action          FileAction        `json:"action"`
+	BucketID        string            `json:"bucketId"`
+	ContentLength   int64             `json:"contentLength"`
+	ContentSha1     string            `json:"contentSha1"`
+	ContentType     string            `json:"contentType"`
+	ID              string            `json:"fileId"`
+	FileInfo        map[string]string `json:"fileInfo"`
+	Name            string            `json:"fileName"`
+	UploadTimestamp int64             `json:"uploadTimestamp"`
+}
+
+// startLargeFileRequest
+type startLargeFileRequest struct {
+	BucketID    string             `json:"bucketId"`
+	Name        string             `json:"fileName"`
+	ContentType string             `json:"contentType"`
+	FileInfo    *map[string]string `json:"fileInfo,omitempty"`
+}
+
+// UploadPartResponse is the response from UploadPart
+type UploadPartResponse struct {
+	ID              string `json:"fileId"`
+	PartNumber      int    `json:"partNumber"`
+	ContentLength   int64  `json:"contentLength"`
+	ContentSha1     string `json:"contentSha1"`
+	UploadTimestamp int64  `json:"uploadTimestamp"`
 }
 
 // FileAction indicates the current status of a file in a B2 bucket
